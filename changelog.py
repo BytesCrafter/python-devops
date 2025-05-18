@@ -12,6 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 import re
+import json
 import requests
 import openai
 from openai import OpenAI
@@ -21,13 +22,19 @@ print(f"{assistant}: CHANGELOG generation is initializing...")
 
 project_name = os.getenv("RELEASE_NAME")
 project_path = os.getenv("PROJECT_PATH")
+
+compare_base = os.getenv("GITHUB_COMPARED_BASE", "release")
+compare_head = os.getenv("GITHUB_COMPARED_HEAD", "develop")
+date_since = os.getenv("GITHUB_SCAN_DATE_SINCE", "2025-01-01")
+
+changelog_openai_summarize = os.getenv("CHANGELOG_OPENAI_SUMMARIZE", False).lower() == 'true'
+openai_summarize_pretext = os.getenv("OPENAI_SUMMARIZE")
+
 changelog_openai_title = os.getenv("CHANGELOG_ITEM_OPENAI_TITLE", False).lower() == 'true'
 changelog_openai_special_note = os.getenv("CHANGELOG_NOTE_OPENAI_GENERATE", False).lower() == 'true'
 changelog_openai_note_instructions = os.getenv("OPENAI_NOTE_INSTRUCTIONS")
-
-changelog_with_time = os.getenv("CHANGELOG_ITEM_WITH_TIME", False).lower() == 'true'
-changelog_with_pr_num = os.getenv("CHANGELOG_ITEM_WITH_PR_NUM", False).lower() == 'true'
 changelog_special_note = os.getenv("CHANGELOG_SPECIAL_NOTE")
+changelog_with_time = os.getenv("CHANGELOG_ITEM_WITH_TIME", False).lower() == 'true'
 
 sanitization_pattern = os.getenv("CHANGELOG_SANITIZATION_PATTERN")
 github_target = os.getenv("GITHUB_TARGET")
@@ -48,19 +55,19 @@ check_changed = ["update", "updated", "modify", "modified", "refactor", "refacto
 check_fixed = ["fix", "fixed", "resolve", "resolved", "bug", "bugs", "issue", "issues", "patch", "patched", "correct", "corrected", "repair", "repaired", "hotfix", "hotfixes", "bugfix", "bugfixes", "closes", "closed", "prevent", "prevented", "trivial"]
 check_removed = ["remove", "removed", "deprecate", "deprecated", "delete", "deleted", "drop", "dropped", "purge", "purged", "eliminate", "eliminated", "discard", "discarded", "retire", "retired", "outdated", "unused", "unnecessary"]
 
-# To store all pull requests and contributors
+# To store all pull requests
 all_repo_items = {
     "Added": [],
     "Changed": [],
     "Fixed": [],
     "Removed": [],
-    "Other": []  # For PRs that don't match any of the categories
+    "Other": []  # For items that don't match any of the categories
 }
-contributors = set()  # Track unique contributors
 
 # GitHub API endpoint to get pull requests
 pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base=release&head=develop'
 issues_url = f'https://api.github.com/repos/{owner}/{repo}/issues?state=closed'
+commits_url = f'https://api.github.com/repos/{owner}/{repo}/compare/{compare_base}...{compare_head}'
 
 headers = {
     'Authorization': f'token {token}',
@@ -78,7 +85,7 @@ def send_chat(prompt, instructions, response_only = True):
             {"role": "system", "content": instructions},
             {"role": "user", "content": prompt}
         ],
-        max_tokens = 120,  # Limit the response length
+        max_tokens = 500,  # Limit the response length
         temperature = 0.7  # Control creativity/randomness of the responses
     )
 
@@ -108,7 +115,7 @@ def categorize_items(item_title):
         return "Removed"
     
     # Default to "Added" if no match
-    return "Added"
+    return "Other"
 
 # Function to fetch closed Pull requests
 def fetch_pulls():
@@ -127,46 +134,45 @@ def fetch_pulls():
             if not pr_data:
                 break
 
-            print(f"{assistant}: Fetching the pull requests from github server...")
+            print(f"{assistant}: Fetching the pulls from github server...")
 
             # Append the data to all_repo_items
-            for pr in pr_data:
-                pr['title'] = re.sub(sanitization_pattern, '', pr['title'])
-                if pr['title'].startswith(':'):
-                    pr['title'] = pr['title'][1:]
-                if pr['title'].startswith('-'):
-                    pr['title'] = pr['title'][1:]
-                if pr['title'].startswith(' '):
-                    pr['title'] = pr['title'][1:]
+            for pulls in pr_data:
+                pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
+                if pulls['title'].startswith(':'):
+                    pulls['title'] = pulls['title'][1:]
+                if pulls['title'].startswith('-'):
+                    pulls['title'] = pulls['title'][1:]
+                if pulls['title'].startswith(' '):
+                    pulls['title'] = pulls['title'][1:]
 
                 if changelog_openai_title:
-                    print(f"{assistant}: Revising and correcting the ticket title...")
-                    pr['title'] = send_chat(os.getenv("OPENAI_PRETEXT") + pr['title'], os.getenv("OPENAI_INSTRUCTIONS"))
-                    print(f"{assistant}: OPENAI REVISION - " + pr['title'])
+                    print(f"{assistant}: Revising and correcting the pulls title...")
+                    pulls['title'] = send_chat(os.getenv("OPENAI_PRETEXT") + pulls['title'], os.getenv("OPENAI_INSTRUCTIONS"))
+                    print(f"{assistant}: OPENAI REVISION - " + pulls['title'])
                 else:
-                    pr['title'] = pr['title']
-                    print(f"{assistant}: Writing - " + pr['title'])
+                    pulls['title'] = pulls['title']
+                    print(f"{assistant}: Writing pulls - " + pulls['title'])
 
-                category = categorize_items(pr['title'])
+                category = categorize_items(pulls['title'])
                 all_repo_items[category].append(pr)
-                contributors.add(pr['user']['login'])
 
             # Move to the next page
             page += 1
         else:
-            print(f"Failed to fetch PRs: {response.status_code}")
+            print(f"Failed to fetch pulls: {response.status_code}")
             break
 
 # Function to fetch closed issues for a specific branch
-def fetch_issues(branch):
+def fetch_issues():
     # Set up initial pagination variables
     page = 1
-    per_page = 100  # You can increase this number to retrieve more PRs per page
+    per_page = 100  # You can increase this number to retrieve more issue per page
     issues = []
 
     while True:
         # Fetch pull requests with pagination
-        response = requests.get(f"{issues_url}&page={page}&per_page={per_page}&labels={branch}", headers=headers)
+        response = requests.get(f"{issues_url}&page={page}&per_page={per_page}&since={date_since}T00:00:00Z", headers=headers)
 
         if response.status_code == 200:
             issue_data = response.json()
@@ -175,7 +181,7 @@ def fetch_issues(branch):
             if not issue_data:
                 break
 
-            print(f"{assistant}: Fetching the issues from github server...")
+            print(f"{assistant}: Fetching the {len(issue_data)} issues from github server...")
 
             # Append the data to all_repo_items
             for issue in issue_data:
@@ -187,35 +193,89 @@ def fetch_issues(branch):
                 if issue['title'].startswith(' '):
                     issue['title'] = issue['title'][1:]
 
+                if f"https://github.com/{owner}/{repo}/pull/{issue['number']}" != issue['html_url']:
+                    issues.append(issue)
+
                 if changelog_openai_title:
-                    print(f"{assistant}: Revising and correcting the ticket title...")
-                    issue_title = send_chat(os.getenv("OPENAI_PRETEXT") + issue['title'], os.getenv("OPENAI_INSTRUCTIONS"))
-                    print(f"{assistant}: OPENAI REVISION - " + issue_title)
+                    print(f"{assistant}: Revising and correcting the issues title...")
+                    issue['title'] = send_chat(os.getenv("OPENAI_PRETEXT") + issue['title'], os.getenv("OPENAI_INSTRUCTIONS"))
+                    print(f"{assistant}: OPENAI REVISION - " + issue['title'])
                 else:
-                    issue_title = pr['title']
-                    print(f"{assistant}: Writing - " + issue_title)
+                    issue['title'] = issue['title']
+                    print(f"{assistant}: Writing issues - " + issue['title'])
 
             # Move to the next page
             page += 1
         else:
-            print(f"Failed to fetch PRs: {response.status_code}")
+            print(f"Failed to fetch issues: {response.status_code}")
             break
 
-if github_target == "pulls":
-    fetch_pulls()
-else:
-    # Fetch closed issues for develop and release branches
-    develop_issues = fetch_issues('develop') or []
-    release_issues = fetch_issues('release') or []
+    return issues
 
-    # Finding differences between the issues closed in both branches
-    issues_in_develop_not_in_release = [issue for issue in develop_issues if issue not in release_issues]
+# Function to fetch commits for a specific branch
+def fetch_issues_from_commits():
+    # Set up initial pagination variables
+    page = 1
+    per_page = 100  # You can increase this number to retrieve more commits per page
+    issue_numbers = []
+
+    while True:
+        # Fetch pull requests with pagination (ensure `commits_url` is defined)
+        response = requests.get(f"{commits_url}?page={page}&per_page={per_page}", headers=headers)
+
+        if response.status_code == 200:
+            commit_data = response.json()
+
+            # Extract commit titles (modify this part if needed based on actual commit data structure)
+            commit_titles = [commit['commit']['message'] for commit in commit_data['commits']]
+
+            # List to hold issue IDs for this page
+            page_issues = []
+
+            # Loop through commit titles and extract issue IDs using regex
+            for c_title in commit_titles:
+                issue_ids = re.findall(r'#(\d+)', c_title)  # Extract issue IDs with regex
+                for issue_id in issue_ids:  # Check each issue_id extracted
+                    if issue_id not in page_issues:  # Avoid adding duplicates for this page
+                        page_issues.append(issue_id)
+
+            # If no more issues, exit the loop
+            if not page_issues:
+                break
+
+            # Ensure unique issue IDs in the overall list
+            for page_issue_id in page_issues:
+                if page_issue_id not in issue_numbers:
+                    issue_numbers.append(page_issue_id)
+
+            # Move to the next page
+            page += 1
+        else:
+            print(f"Failed to fetch commits: {response.status_code}")
+            break
+    return issue_numbers
+
+if github_target == "issues":
+    # Fetch closed issues for with start date.
+    issue_lists = fetch_issues() or []
+    print(f"{assistant}: Fetched issue total numbers: ", len(issue_lists))    
+
+    # Get the list of issue number from commits.
+    issue_numbers = fetch_issues_from_commits()
+    print(f"{assistant}: Fetched issue from commits: ", len(issue_numbers))
+
+    # Now filter out the relevant issues
+    final_issues = []
+    for issue in issue_lists:
+        if str(issue["number"]) in issue_numbers:
+            final_issues.append(issue)
 
     # Compile the issues diff to all issues.
-    for issue in issues_in_develop_not_in_release:
+    for issue in final_issues:
         category = categorize_items(issue["title"])
         all_repo_items[category].append(issue)
-        contributors.add(issue['user']['login'])
+else:
+    fetch_pulls()
 
 print(f"{assistant}: Completed processing items from server.")
 
@@ -232,7 +292,7 @@ if any(all_repo_items.values()):
     print(f"{assistant}: Categorizing the CHANGELOG items to Added, Changed, Fixed, and Removed.")
 
     # Group PRs into categories and add to the changelog
-    for category in ["Added", "Changed", "Fixed", "Removed"]:
+    for category in ["Added", "Changed", "Fixed", "Removed", "Other"]:
         changelog_content += f"### {category} \n\n"
         for repo_item in all_repo_items[category]:
             item_title = repo_item['title']
@@ -250,12 +310,9 @@ if any(all_repo_items.values()):
             else:
                 formatted_date = closed_date.strftime("%Y-%m-%d")
 
-            if github_target == "pulls" and changelog_with_pr_num:
-                pre_text = f" [PR #{item_number}]({item_url}):"
-            else:
-                pre_text = ""
+            pre_text = f" [#{item_number}]({item_url}) - "
 
-            # Adding the PR number as a markdown link and formatted date
+            # Adding the item number as a markdown link and formatted date
             changelog_content += f"-{pre_text} {item_title} by [{item_user}]({user_url}) (Closed on {formatted_date})\n"
 
     print(f"{assistant}: Finalizing the CHANGELOG footer for special notes and contributors.")
@@ -268,10 +325,12 @@ if any(all_repo_items.values()):
         print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
     else:
         changelog_content += "{changelog_special_note}"
+
+    if changelog_openai_summarize:
+        changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
+    
     changelog_content += "\n\n"
-    changelog_content += "Special thanks to all contributors: "
-    changelog_content += ", ".join([f"[@{login}](https://github.com/{login})" for login in sorted(contributors)])
-    changelog_content += "! 💯🥳\n"
+    changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
 
     # Write to CHANGELOG file with UTF-8 encoding
     with open(log_path, "w", encoding="utf-8") as file:
