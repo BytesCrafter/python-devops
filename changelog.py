@@ -329,8 +329,21 @@ if any(all_repo_items.values()):
     if changelog_openai_summarize:
         changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
     
-    changelog_content += "\n\n"
-    changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
+    # Collect unique contributors from issues
+    contributors = set()
+    for category in all_repo_items.values():
+        for item in category:
+            if 'user' in item:
+                contributors.add((item['user']['login'], item['user']['html_url']))
+    
+    changelog_content += "\n\nSpecial thanks to the development team"
+    if contributors:
+        changelog_content += ": "
+        changelog_content += ", ".join(
+            f"[@{login}]({url})"
+            for login, url in sorted(contributors)
+        )
+    changelog_content += "! 💯🥳\n"
 
     # Write to CHANGELOG file with UTF-8 encoding
     with open(log_path, "w", encoding="utf-8") as file:
