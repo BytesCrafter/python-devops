@@ -48,7 +48,7 @@ check_changed = ["update", "updated", "modify", "modified", "refactor", "refacto
 check_fixed = ["fix", "fixed", "resolve", "resolved", "bug", "bugs", "issue", "issues", "patch", "patched", "correct", "corrected", "repair", "repaired", "hotfix", "hotfixes", "bugfix", "bugfixes", "closes", "closed", "prevent", "prevented", "trivial"]
 check_removed = ["remove", "removed", "deprecate", "deprecated", "delete", "deleted", "drop", "dropped", "purge", "purged", "eliminate", "eliminated", "discard", "discarded", "retire", "retired", "outdated", "unused", "unnecessary"]
 
-# To store all pull requests
+# To store all pull requests and contributors
 all_repo_items = {
     "Added": [],
     "Changed": [],
@@ -56,6 +56,7 @@ all_repo_items = {
     "Removed": [],
     "Other": []  # For PRs that don't match any of the categories
 }
+contributors = set()  # Track unique contributors
 
 # GitHub API endpoint to get pull requests
 pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base=release&head=develop'
@@ -148,6 +149,7 @@ def fetch_pulls():
 
                 category = categorize_items(pr['title'])
                 all_repo_items[category].append(pr)
+                contributors.add(pr['user']['login'])
 
             # Move to the next page
             page += 1
@@ -213,6 +215,7 @@ else:
     for issue in issues_in_develop_not_in_release:
         category = categorize_items(issue["title"])
         all_repo_items[category].append(issue)
+        contributors.add(issue['user']['login'])
 
 print(f"{assistant}: Completed processing items from server.")
 
@@ -266,7 +269,9 @@ if any(all_repo_items.values()):
     else:
         changelog_content += "{changelog_special_note}"
     changelog_content += "\n\n"
-    changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
+    changelog_content += "Special thanks to all contributors: "
+    changelog_content += ", ".join([f"[@{login}](https://github.com/{login})" for login in sorted(contributors)])
+    changelog_content += "! 💯🥳\n"
 
     # Write to CHANGELOG file with UTF-8 encoding
     with open(log_path, "w", encoding="utf-8") as file:
