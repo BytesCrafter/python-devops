@@ -321,12 +321,15 @@ if any(all_repo_items.values()):
 
     # Add the footer of the file.
     changelog_content += "## Special Notes\n\n"
+    special_note = (changelog_special_note or "").strip()
     if changelog_openai_special_note:
         special_note_generated = send_chat(changelog_openai_note_instructions + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
         changelog_content += special_note_generated
         print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
+    elif special_note:
+        changelog_content += special_note
     else:
-        changelog_content += "{changelog_special_note}"
+        changelog_content += "No special notes for this release."
 
     if changelog_openai_summarize:
         changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
