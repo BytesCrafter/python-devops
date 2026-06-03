@@ -117,6 +117,20 @@ def categorize_items(item_title):
     # Default to "Added" if no match
     return "Other"
 
+
+def normalize_item_title(item_title):
+    if sanitization_pattern:
+        item_title = re.sub(sanitization_pattern, '', item_title or '')
+    else:
+        item_title = item_title or ''
+    if item_title.startswith(':'):
+        item_title = item_title[1:]
+    if item_title.startswith('-'):
+        item_title = item_title[1:]
+    if item_title.startswith(' '):
+        item_title = item_title[1:]
+    return item_title
+
 # Function to fetch closed Pull requests
 def fetch_pulls():
     # Set up initial pagination variables
@@ -138,13 +152,7 @@ def fetch_pulls():
 
             # Append the data to all_repo_items
             for pulls in pr_data:
-                pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
-                if pulls['title'].startswith(':'):
-                    pulls['title'] = pulls['title'][1:]
-                if pulls['title'].startswith('-'):
-                    pulls['title'] = pulls['title'][1:]
-                if pulls['title'].startswith(' '):
-                    pulls['title'] = pulls['title'][1:]
+                pulls['title'] = normalize_item_title(pulls['title'])
 
                 if changelog_openai_title:
                     print(f"{assistant}: Revising and correcting the pulls title...")
@@ -185,13 +193,7 @@ def fetch_issues():
 
             # Append the data to all_repo_items
             for issue in issue_data:
-                issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
-                if issue['title'].startswith(':'):
-                    issue['title'] = issue['title'][1:]
-                if issue['title'].startswith('-'):
-                    issue['title'] = issue['title'][1:]
-                if issue['title'].startswith(' '):
-                    issue['title'] = issue['title'][1:]
+                issue['title'] = normalize_item_title(issue['title'])
 
                 if f"https://github.com/{owner}/{repo}/pull/{issue['number']}" != issue['html_url']:
                     issues.append(issue)
@@ -319,12 +321,15 @@ if any(all_repo_items.values()):
 
     # Add the footer of the file.
     changelog_content += "## Special Notes\n\n"
+    special_note = (changelog_special_note or "").strip()
     if changelog_openai_special_note:
         special_note_generated = send_chat(changelog_openai_note_instructions + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
         changelog_content += special_note_generated
         print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
+    elif special_note:
+        changelog_content += special_note
     else:
-        changelog_content += "{changelog_special_note}"
+        changelog_content += "No special notes for this release."
 
     if changelog_openai_summarize:
         changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
