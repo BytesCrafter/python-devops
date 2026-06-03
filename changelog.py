@@ -117,6 +117,20 @@ def categorize_items(item_title):
     # Default to "Added" if no match
     return "Other"
 
+
+def normalize_item_title(item_title):
+    if sanitization_pattern:
+        item_title = re.sub(sanitization_pattern, '', item_title or '')
+    else:
+        item_title = item_title or ''
+    if item_title.startswith(':'):
+        item_title = item_title[1:]
+    if item_title.startswith('-'):
+        item_title = item_title[1:]
+    if item_title.startswith(' '):
+        item_title = item_title[1:]
+    return item_title
+
 # Function to fetch closed Pull requests
 def fetch_pulls():
     # Set up initial pagination variables
@@ -138,13 +152,7 @@ def fetch_pulls():
 
             # Append the data to all_repo_items
             for pulls in pr_data:
-                pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
-                if pulls['title'].startswith(':'):
-                    pulls['title'] = pulls['title'][1:]
-                if pulls['title'].startswith('-'):
-                    pulls['title'] = pulls['title'][1:]
-                if pulls['title'].startswith(' '):
-                    pulls['title'] = pulls['title'][1:]
+                pulls['title'] = normalize_item_title(pulls['title'])
 
                 if changelog_openai_title:
                     print(f"{assistant}: Revising and correcting the pulls title...")
@@ -185,13 +193,7 @@ def fetch_issues():
 
             # Append the data to all_repo_items
             for issue in issue_data:
-                issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
-                if issue['title'].startswith(':'):
-                    issue['title'] = issue['title'][1:]
-                if issue['title'].startswith('-'):
-                    issue['title'] = issue['title'][1:]
-                if issue['title'].startswith(' '):
-                    issue['title'] = issue['title'][1:]
+                issue['title'] = normalize_item_title(issue['title'])
 
                 if f"https://github.com/{owner}/{repo}/pull/{issue['number']}" != issue['html_url']:
                     issues.append(issue)
