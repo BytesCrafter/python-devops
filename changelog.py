@@ -65,7 +65,7 @@ all_repo_items = {
 }
 
 # GitHub API endpoint to get pull requests
-pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base=release&head=develop'
+pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base={compare_base}&head={compare_head}'
 issues_url = f'https://api.github.com/repos/{owner}/{repo}/issues?state=closed'
 commits_url = f'https://api.github.com/repos/{owner}/{repo}/compare/{compare_base}...{compare_head}'
 
@@ -155,7 +155,7 @@ def fetch_pulls():
                     print(f"{assistant}: Writing pulls - " + pulls['title'])
 
                 category = categorize_items(pulls['title'])
-                all_repo_items[category].append(pr)
+                all_repo_items[category].append(pulls)
 
             # Move to the next page
             page += 1
