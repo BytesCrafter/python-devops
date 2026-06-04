@@ -138,7 +138,8 @@ def fetch_pulls():
 
             # Append the data to all_repo_items
             for pulls in pr_data:
-                pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
+                if sanitization_pattern:
+                    pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
                 if pulls['title'].startswith(':'):
                     pulls['title'] = pulls['title'][1:]
                 if pulls['title'].startswith('-'):
@@ -155,7 +156,7 @@ def fetch_pulls():
                     print(f"{assistant}: Writing pulls - " + pulls['title'])
 
                 category = categorize_items(pulls['title'])
-                all_repo_items[category].append(pr)
+                all_repo_items[category].append(pulls)
 
             # Move to the next page
             page += 1
@@ -185,7 +186,8 @@ def fetch_issues():
 
             # Append the data to all_repo_items
             for issue in issue_data:
-                issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
+                if sanitization_pattern:
+                    issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
                 if issue['title'].startswith(':'):
                     issue['title'] = issue['title'][1:]
                 if issue['title'].startswith('-'):
