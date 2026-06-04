@@ -8,6 +8,7 @@
 # ===============================================================================
 
 import os
+import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -20,8 +21,25 @@ from openai import OpenAI
 assistant = os.getenv("ASSISTANT_NAME", "PEASANT")
 print(f"{assistant}: CHANGELOG generation is initializing...")
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate a changelog from GitHub pull requests or issues.")
+    parser.add_argument(
+        "--output",
+        help="Override the output path for the generated changelog file.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the generated changelog without writing it to disk.",
+    )
+    return parser.parse_args()
+
+
+args = parse_args()
+
 project_name = os.getenv("RELEASE_NAME")
-project_path = os.getenv("PROJECT_PATH")
+project_path = os.getenv("PROJECT_PATH") or os.getcwd()
 
 compare_base = os.getenv("GITHUB_COMPARED_BASE", "release")
 compare_head = os.getenv("GITHUB_COMPARED_HEAD", "develop")
@@ -281,6 +299,8 @@ print(f"{assistant}: Completed processing items from server.")
 
 # Calculate the path two directories back
 log_path = os.path.join(project_path, "CHANGELOG.md")
+if args.output:
+    log_path = args.output
 
 # Proceed with writing the changelog if pull requests were fetched
 if any(all_repo_items.values()):
@@ -332,10 +352,14 @@ if any(all_repo_items.values()):
     changelog_content += "\n\n"
     changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
 
-    # Write to CHANGELOG file with UTF-8 encoding
-    with open(log_path, "w", encoding="utf-8") as file:
-        file.write(changelog_content)
-    
-    print(f"{assistant}: Changelog written to {log_path}")
+    if args.dry_run:
+        print(f"{assistant}: Dry-run enabled; generated changelog preview follows:\n")
+        print(changelog_content)
+    else:
+        # Write to CHANGELOG file with UTF-8 encoding
+        with open(log_path, "w", encoding="utf-8") as file:
+            file.write(changelog_content)
+
+        print(f"{assistant}: Changelog written to {log_path}")
 else:
     print(f"{assistant}: No {github_target} found or failed to fetch them.")

@@ -57,6 +57,18 @@ To automate and standardize the DevOps workflow from documentation through deplo
    python changelog.py
    ```
 
+   Preview the generated changelog without writing to disk:
+
+   ```bash
+   python changelog.py --dry-run
+   ```
+
+   Write the changelog to a custom destination:
+
+   ```bash
+   python changelog.py --output ./CHANGELOG.preview.md
+   ```
+
 ## 📄 Output
 
 - `CHANGELOG.md` – A changelog file generated from pull requests
@@ -67,6 +79,7 @@ To automate and standardize the DevOps workflow from documentation through deplo
 
 - This script is intended for use in Python-based CI/CD environments.
 - Can be integrated into GitHub Actions, GitLab CI, or other pipelines.
+- `--dry-run` prints the generated changelog to stdout, and `--output` overrides the destination file path.
 - OpenAI is used to generate natural-language summaries of pull request activity and development changes.
 
 ## 📃 License
