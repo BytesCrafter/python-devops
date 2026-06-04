@@ -352,10 +352,14 @@ if any(all_repo_items.values()):
     changelog_content += "\n\n"
     changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
 
-    # Write to CHANGELOG file with UTF-8 encoding
-    with open(log_path, "w", encoding="utf-8") as file:
-        file.write(changelog_content)
-    
-    print(f"{assistant}: Changelog written to {log_path}")
+    if args.dry_run:
+        print(f"{assistant}: Dry-run enabled; generated changelog preview follows:\n")
+        print(changelog_content)
+    else:
+        # Write to CHANGELOG file with UTF-8 encoding
+        with open(log_path, "w", encoding="utf-8") as file:
+            file.write(changelog_content)
+
+        print(f"{assistant}: Changelog written to {log_path}")
 else:
     print(f"{assistant}: No {github_target} found or failed to fetch them.")
