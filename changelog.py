@@ -8,6 +8,7 @@
 # ===============================================================================
 
 import os
+import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -20,8 +21,25 @@ from openai import OpenAI
 assistant = os.getenv("ASSISTANT_NAME", "PEASANT")
 print(f"{assistant}: CHANGELOG generation is initializing...")
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate a changelog from GitHub pull requests or issues.")
+    parser.add_argument(
+        "--output",
+        help="Override the output path for the generated changelog file.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the generated changelog without writing it to disk.",
+    )
+    return parser.parse_args()
+
+
+args = parse_args()
+
 project_name = os.getenv("RELEASE_NAME")
-project_path = os.getenv("PROJECT_PATH")
+project_path = os.getenv("PROJECT_PATH") or os.getcwd()
 
 compare_base = os.getenv("GITHUB_COMPARED_BASE", "release")
 compare_head = os.getenv("GITHUB_COMPARED_HEAD", "develop")
@@ -281,6 +299,8 @@ print(f"{assistant}: Completed processing items from server.")
 
 # Calculate the path two directories back
 log_path = os.path.join(project_path, "CHANGELOG.md")
+if args.output:
+    log_path = args.output
 
 # Proceed with writing the changelog if pull requests were fetched
 if any(all_repo_items.values()):
