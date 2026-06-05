@@ -155,7 +155,7 @@ def fetch_pulls():
                     print(f"{assistant}: Writing pulls - " + pulls['title'])
 
                 category = categorize_items(pulls['title'])
-                all_repo_items[category].append(pr)
+                all_repo_items[category].append(pulls)
 
             # Move to the next page
             page += 1
