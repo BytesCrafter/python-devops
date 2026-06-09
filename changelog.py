@@ -281,61 +281,64 @@ print(f"{assistant}: Completed processing items from server.")
 
 # Calculate the path two directories back
 log_path = os.path.join(project_path, "CHANGELOG.md")
+has_items = any(all_repo_items.values())
 
-# Proceed with writing the changelog if pull requests were fetched
-if any(all_repo_items.values()):
-    changelog_content = f"# {project_name}\n\n"
-    changelog_content += "All notable changes to this project will be documented in this file.\n\n"
-    changelog_content += "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
-    changelog_content += f"### {release_version} - {release_date} Release \n\n"
+# Always write a scaffold, even when no matching items are found.
+changelog_content = f"# {project_name}\n\n"
+changelog_content += "All notable changes to this project will be documented in this file.\n\n"
+changelog_content += "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
+changelog_content += f"### {release_version} - {release_date} Release \n\n"
 
+if has_items:
     print(f"{assistant}: Categorizing the CHANGELOG items to Added, Changed, Fixed, and Removed.")
-
-    # Group PRs into categories and add to the changelog
-    for category in ["Added", "Changed", "Fixed", "Removed", "Other"]:
-        changelog_content += f"### {category} \n\n"
-        for repo_item in all_repo_items[category]:
-            item_title = repo_item['title']
-            item_number = repo_item['number']
-            item_user = repo_item['user']['login']
-            item_date = repo_item['closed_at']
-            item_url = repo_item['html_url']
-            user_url = f"https://github.com/{item_user}"
-    
-            # Convert the closed_at date to datetime and format it
-            closed_date = datetime.strptime(item_date, "%Y-%m-%dT%H:%M:%SZ")
-
-            if changelog_with_time:
-                formatted_date = closed_date.strftime("%Y-%m-%d %I:%M %p")
-            else:
-                formatted_date = closed_date.strftime("%Y-%m-%d")
-
-            pre_text = f" [#{item_number}]({item_url}) - "
-
-            # Adding the item number as a markdown link and formatted date
-            changelog_content += f"-{pre_text} {item_title} by [{item_user}]({user_url}) (Closed on {formatted_date})\n"
-
-    print(f"{assistant}: Finalizing the CHANGELOG footer for special notes and contributors.")
-
-    # Add the footer of the file.
-    changelog_content += "## Special Notes\n\n"
-    if changelog_openai_special_note:
-        special_note_generated = send_chat(changelog_openai_note_instructions + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
-        changelog_content += special_note_generated
-        print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
-    else:
-        changelog_content += "{changelog_special_note}"
-
-    if changelog_openai_summarize:
-        changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
-    
-    changelog_content += "\n\n"
-    changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
-
-    # Write to CHANGELOG file with UTF-8 encoding
-    with open(log_path, "w", encoding="utf-8") as file:
-        file.write(changelog_content)
-    
-    print(f"{assistant}: Changelog written to {log_path}")
 else:
-    print(f"{assistant}: No {github_target} found or failed to fetch them.")
+    print(f"{assistant}: No matching changelog items were found; writing an empty-state scaffold.")
+
+# Group PRs into categories and add to the changelog
+for category in ["Added", "Changed", "Fixed", "Removed", "Other"]:
+    changelog_content += f"### {category} \n\n"
+    if not has_items and category == "Other":
+        changelog_content += "- No qualifying issues or pull requests were found for this release window.\n"
+    for repo_item in all_repo_items[category]:
+        item_title = repo_item['title']
+        item_number = repo_item['number']
+        item_user = repo_item['user']['login']
+        item_date = repo_item['closed_at']
+        item_url = repo_item['html_url']
+        user_url = f"https://github.com/{item_user}"
+
+        # Convert the closed_at date to datetime and format it
+        closed_date = datetime.strptime(item_date, "%Y-%m-%dT%H:%M:%SZ")
+
+        if changelog_with_time:
+            formatted_date = closed_date.strftime("%Y-%m-%d %I:%M %p")
+        else:
+            formatted_date = closed_date.strftime("%Y-%m-%d")
+
+        pre_text = f" [#{item_number}]({item_url}) - "
+
+        # Adding the item number as a markdown link and formatted date
+        changelog_content += f"-{pre_text} {item_title} by [{item_user}]({user_url}) (Closed on {formatted_date})\n"
+
+print(f"{assistant}: Finalizing the CHANGELOG footer for special notes and contributors.")
+
+# Add the footer of the file.
+changelog_content += "## Special Notes\n\n"
+if changelog_openai_special_note:
+    special_note_generated = str(send_chat((changelog_openai_note_instructions or "") + changelog_content, os.getenv("OPENAI_INSTRUCTIONS") or ""))
+    changelog_content += special_note_generated
+    print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
+else:
+    changelog_content += str(changelog_special_note or "")
+
+if changelog_openai_summarize:
+    changelog_content = str(send_chat((openai_summarize_pretext or "") + changelog_content, os.getenv("OPENAI_INSTRUCTIONS") or ""))
+
+changelog_content += "\n\n"
+changelog_content += "Special thanks to the development team, [@BytesCrafter](https://github.com/BytesCrafter), [@caezariidecastro](https://github.com/caezariidecastro), [@BC-Tristan](https://github.com/BC-Tristan), [@BC-Patrick](https://github.com/BC-Patrick)! 💯🥳\n"
+
+# Write to CHANGELOG file with UTF-8 encoding
+with open(log_path, "w", encoding="utf-8") as file:
+    file.write(changelog_content)
+
+print(f"{assistant}: Changelog written to {log_path}")
