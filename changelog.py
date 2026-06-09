@@ -17,6 +17,14 @@ import requests
 import openai
 from openai import OpenAI
 
+
+def env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 assistant = os.getenv("ASSISTANT_NAME", "PEASANT")
 print(f"{assistant}: CHANGELOG generation is initializing...")
 
@@ -27,16 +35,16 @@ compare_base = os.getenv("GITHUB_COMPARED_BASE", "release")
 compare_head = os.getenv("GITHUB_COMPARED_HEAD", "develop")
 date_since = os.getenv("GITHUB_SCAN_DATE_SINCE", "2025-01-01")
 
-changelog_openai_summarize = os.getenv("CHANGELOG_OPENAI_SUMMARIZE", False).lower() == 'true'
+changelog_openai_summarize = env_flag("CHANGELOG_OPENAI_SUMMARIZE")
 openai_summarize_pretext = os.getenv("OPENAI_SUMMARIZE")
 
-changelog_openai_title = os.getenv("CHANGELOG_ITEM_OPENAI_TITLE", False).lower() == 'true'
-changelog_openai_special_note = os.getenv("CHANGELOG_NOTE_OPENAI_GENERATE", False).lower() == 'true'
+changelog_openai_title = env_flag("CHANGELOG_ITEM_OPENAI_TITLE")
+changelog_openai_special_note = env_flag("CHANGELOG_NOTE_OPENAI_GENERATE")
 changelog_openai_note_instructions = os.getenv("OPENAI_NOTE_INSTRUCTIONS")
 changelog_special_note = os.getenv("CHANGELOG_SPECIAL_NOTE")
-changelog_with_time = os.getenv("CHANGELOG_ITEM_WITH_TIME", False).lower() == 'true'
+changelog_with_time = env_flag("CHANGELOG_ITEM_WITH_TIME")
 
-sanitization_pattern = os.getenv("CHANGELOG_SANITIZATION_PATTERN")
+sanitization_pattern = os.getenv("CHANGELOG_SANITIZATION_PATTERN") or ""
 github_target = os.getenv("GITHUB_TARGET")
 
 # Replace with the version and release date.
@@ -65,7 +73,7 @@ all_repo_items = {
 }
 
 # GitHub API endpoint to get pull requests
-pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base=release&head=develop'
+pull_request_url = f'https://api.github.com/repos/{owner}/{repo}/pulls?state=all&base={compare_base}&head={compare_head}'
 issues_url = f'https://api.github.com/repos/{owner}/{repo}/issues?state=closed'
 commits_url = f'https://api.github.com/repos/{owner}/{repo}/compare/{compare_base}...{compare_head}'
 
@@ -138,7 +146,8 @@ def fetch_pulls():
 
             # Append the data to all_repo_items
             for pulls in pr_data:
-                pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
+                if sanitization_pattern:
+                    pulls['title'] = re.sub(sanitization_pattern, '', pulls['title'])
                 if pulls['title'].startswith(':'):
                     pulls['title'] = pulls['title'][1:]
                 if pulls['title'].startswith('-'):
@@ -155,7 +164,7 @@ def fetch_pulls():
                     print(f"{assistant}: Writing pulls - " + pulls['title'])
 
                 category = categorize_items(pulls['title'])
-                all_repo_items[category].append(pr)
+                all_repo_items[category].append(pulls)
 
             # Move to the next page
             page += 1
@@ -185,7 +194,8 @@ def fetch_issues():
 
             # Append the data to all_repo_items
             for issue in issue_data:
-                issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
+                if sanitization_pattern:
+                    issue['title'] = re.sub(sanitization_pattern, '', issue['title'])
                 if issue['title'].startswith(':'):
                     issue['title'] = issue['title'][1:]
                 if issue['title'].startswith('-'):
@@ -324,7 +334,7 @@ if any(all_repo_items.values()):
         changelog_content += special_note_generated
         print(f"{assistant}: SPECIAL NOTE GENERATED - " + special_note_generated)
     else:
-        changelog_content += "{changelog_special_note}"
+        changelog_content += changelog_special_note or ""
 
     if changelog_openai_summarize:
         changelog_content = send_chat(openai_summarize_pretext + changelog_content, os.getenv("OPENAI_INSTRUCTIONS"))
